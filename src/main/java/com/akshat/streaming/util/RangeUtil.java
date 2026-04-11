@@ -4,17 +4,15 @@ public class RangeUtil {
 
     public long[] parseRangeHeader(String rangeHeader, long fileSize) {
 
-        // 🔹 No range → full file
         if (rangeHeader == null || rangeHeader.isEmpty()) {
             return new long[]{0, fileSize - 1};
         }
 
         if (!rangeHeader.startsWith("bytes=")) {
-            throw new IllegalArgumentException("Invalid Range header format");
+            throw new IllegalArgumentException("Invalid Range prefix");
         }
 
-        String rangeValue = rangeHeader.substring(6);
-        String[] parts = rangeValue.split("-");
+        String[] parts = rangeHeader.substring(6).split("-",2);
 
         if (parts.length != 2) {
             throw new IllegalArgumentException("Invalid Range format");
@@ -25,21 +23,28 @@ public class RangeUtil {
 
         try {
 
-            // 🔹 Case: bytes=500-1000
+            // bytes=500-1000
             if (!parts[0].isEmpty() && !parts[1].isEmpty()) {
                 start = Long.parseLong(parts[0]);
                 end = Long.parseLong(parts[1]);
             }
 
-            // 🔹 Case: bytes=500-
+            // bytes=500-
             else if (!parts[0].isEmpty()) {
                 start = Long.parseLong(parts[0]);
                 end = fileSize - 1;
             }
 
-            // 🔹 Case: bytes=-500 (last 500 bytes)
+            // bytes=-500
             else if (!parts[1].isEmpty()) {
                 long suffixLength = Long.parseLong(parts[1]);
+
+                if (suffixLength <= 0) {
+                    throw new IllegalArgumentException("Invalid suffix length");
+                }
+
+                suffixLength = Math.min(suffixLength, fileSize);
+
                 start = fileSize - suffixLength;
                 end = fileSize - 1;
             }
@@ -49,17 +54,21 @@ public class RangeUtil {
             }
 
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid number in Range header");
+            throw new IllegalArgumentException("Invalid numeric values in Range");
         }
 
-        // 🔥 VALIDATION
+        // 🔥 STRICT VALIDATION
 
-        if (start < 0) start = 0;
+        if (start < 0 || start >= fileSize) {
+            throw new IllegalArgumentException("Range start out of bounds");
+        }
 
-        if (end >= fileSize) end = fileSize - 1;
+        if (end < start) {
+            throw new IllegalArgumentException("Range end before start");
+        }
 
-        if (start > end || start >= fileSize) {
-            throw new IllegalArgumentException("Range Not Satisfiable");
+        if (end >= fileSize) {
+            end = fileSize - 1;
         }
 
         return new long[]{start, end};

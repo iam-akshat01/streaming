@@ -5,16 +5,19 @@ import com.akshat.streaming.util.RangeUtil;
 
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.stereotype.Service;
+
 import java.io.*;
 
-import org.springframework.stereotype.Service;
 @Service
 public class StreamingService {
 
     private static final int BUFFER_SIZE = 8 * 1024; // 8KB
-    private static final long MAX_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+    private static final long MAX_CHUNK_SIZE = 2 * 1024* 1024; // 2MB
 
-    public void streamVideo(Video v, String range, HttpServletResponse response) throws IOException {
+    private final RangeUtil rangeUtil = new RangeUtil();
+
+    public void streamVideo(Video v, String rangeHeader, HttpServletResponse response) throws IOException {
 
         File videoFile = new File(v.getUrl());
 
@@ -25,47 +28,36 @@ public class StreamingService {
 
         long fileSize = videoFile.length();
 
-        long start = 0;
-        long end = fileSize - 1;
+        long start;
+        long end;
         boolean isPartial = false;
 
-        // 🔥 Handle Range
-        if (range != null && range.startsWith("bytes=")) {
-            isPartial = true;
+        try {
+            long[] range = rangeUtil.parseRangeHeader(rangeHeader, fileSize);
+            start = range[0];
+            end = range[1];
 
-            String[] parts = range.substring(6).split("-");
-            try {
-                if (!parts[0].isEmpty()) {
-                    start = Long.parseLong(parts[0]);
-                }
-                if (!parts[1].isEmpty()) {
-                    end = Long.parseLong(parts[1]);
-                }
-            } catch (NumberFormatException e) {
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return;
+            if (rangeHeader != null) {
+                isPartial = true;
             }
 
-            // 🔥 Validation
-            if (start >= fileSize || start > end) {
-                response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
-                return;
-            }
+        } catch (IllegalArgumentException e) {
+            response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+            return;
+        }
 
-            // 🔥 Cap chunk size
+        // 🔥 Apply chunk cap ONLY for partial requests
+        if (isPartial) {
             long maxEnd = start + MAX_CHUNK_SIZE - 1;
             if (end > maxEnd) {
                 end = maxEnd;
             }
-
-            if (end >= fileSize) {
-                end = fileSize - 1;
-            }
         }
 
         long contentLength = end - start + 1;
+        System.out.println(contentLength);
 
-        // 🔥 Set headers BEFORE streaming
+        // 🔥 Headers FIRST
         response.setContentType("video/mp4");
         response.setHeader("Accept-Ranges", "bytes");
 
@@ -78,7 +70,7 @@ public class StreamingService {
 
         response.setHeader("Content-Length", String.valueOf(contentLength));
 
-        // 🔥 Streaming
+        // 🔥 Stream data
         try (RandomAccessFile raf = new RandomAccessFile(videoFile, "r");
              OutputStream out = response.getOutputStream()) {
 
