@@ -1,24 +1,25 @@
 package com.akshat.streaming.websocket.model;
 
-import java.util.Set;
 import org.springframework.web.socket.WebSocketSession;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Room {
-    private final String name;
-    private final int id;
-    private Set<WebSocketSession> sessions;
 
-    public Room(String name, int id) {
+    private final String name;
+    private final Integer id;
+    private final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
+
+    public Room(String name, Integer id) {
         this.name = name;
         this.id = id;
-        this.sessions = new java.util.HashSet<>();
     }
 
     public String getName() {
         return name;
     }
 
-    public int getId() {
+    public Integer getId() {
         return id;
     }
 
